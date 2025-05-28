@@ -1,3 +1,13 @@
+/* 
+TODO: update procedure to https://ai.google.dev/gemini-api/docs/text-generation#go using genai (including stream response)
+TODO: branch to a crypto option so don't have api key exposed in .env (even though is local)
+TODO: default to flash 2.0 if none model is specified (flag for model selection)
+TODO: add release so can be summoned by just typing "gemyni" after go installing it as a package
+? Potentially integrating image generation with flash 2.0
+? Add tests
+? Add more LLMs options for api calls (maybe would break the api response and error so integrate with standarized format)
+*/
+
 package main
 
 import (
@@ -9,29 +19,47 @@ import (
 	"os"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/joho/godotenv"
 )
 
 type Response struct {
 	Candidates []Candidate `json:"candidates"`
 }
-
 type Candidate struct {
 	Content Content `json:"content"`
 }
-
 type Content struct {
 	Parts []Part `json:"parts"`
 }
-
 type Part struct {
 	Text string `json:"text"`
 }
 
-func main() {
-	arg := os.Args[1]
-	jsondata := []byte(fmt.Sprintf(`{"contents":[{"parts":[{"text":"%s"}]}]}`, arg))
+type ResponseError struct {
+	Err ApiError `json:"error"`
+}
+type ApiError struct {
+	Code int `json:"code"`
+	Message string `json:"message"`
+	Status string `json:"status"`
+}
 
-	req, err := http.NewRequest("POST", "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=", bytes.NewBuffer(jsondata))
+func main() {
+	query := os.Args[1]
+	jsondata := fmt.Appendf(nil, `{"contents":[{"parts":[{"text":"%s"}]}]}`, query)	
+	
+	err := godotenv.Load(".env")
+	if err != nil {
+		fmt.Println("Failed loading .env file")
+	}
+	apiKey := os.Getenv("LLM_KEY")
+	
+	if apiKey == "" {
+		fmt.Println("Missing api key in .env")
+		return
+	}
+	url := fmt.Sprintf(flash20L, apiKey)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsondata))
 	if err != nil {
 		fmt.Println("Failed creating request: ", err.Error())
 		return
@@ -44,11 +72,27 @@ func main() {
 	if err != nil {
 		fmt.Println("Failed doing request: ", err.Error())
 	}
-	defer resp.Body.Close()
 
+	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println("Failed reading response body: ", err.Error())
+	}
+
+	if resp.StatusCode != 200 {
+		var respErr ResponseError
+		err = json.Unmarshal(body, &respErr)
+		if err != nil {
+			fmt.Println("Failed unmarshalling json response error: ", err.Error())
+			return
+		}
+		if len(respErr.Err.Message) <= 0 {
+			fmt.Println("Response error message blank")
+		} else {
+			fmt.Println("Status:", respErr.Err.Code, respErr.Err.Status)
+			fmt.Println(respErr.Err.Message)
+		}
+		return
 	}
 
 	var apiResponse Response
@@ -57,22 +101,17 @@ func main() {
 	if err != nil {
 		fmt.Println("Failed unmarshalling json response:", err.Error())
 	}
+	if len(apiResponse.Candidates) <= 0 {
+		fmt.Println("Request response length ", len(apiResponse.Candidates))
+		return
+	}
 
 	text := apiResponse.Candidates[0].Content.Parts[0].Text
 
-	fmt.Println("Status: ", resp.Status)
-	// Usar glamour para renderizar el texto Markdown
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.("NoTTy"), // Usar el tema "NoTTy"
-		glamour.WithWordWrap(80),   // Ajusta el ancho según necesites
-	)
-
-	out, err := renderer.Render(text)
+	out, err := glamour.Render(text, "dark")
 	if err != nil {
 		fmt.Println("Failed rendering glamour:", err.Error())
-		return
 	} else {
 		fmt.Print(out)
 	}
-
 }
