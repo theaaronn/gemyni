@@ -2,7 +2,10 @@ module gemyni
 
 go 1.24.2
 
-require github.com/charmbracelet/glamour v0.10.0
+require (
+	github.com/charmbracelet/glamour v0.10.0
+	github.com/joho/godotenv v1.5.1
+)
 
 require (
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
