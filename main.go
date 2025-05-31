@@ -1,10 +1,10 @@
 /*
 (DONE) TODO: procedure to https://ai.google.dev/gemini-api/docs/text-generation#go using genai (including stream response)
 The response is streamed but if printed to screen as it comes, the markdown renderer adds an unwanted jumpline, which is tricky to debug since there are actual necessary jumplines in the response that should be shown
+(DONE)TODO: add release so can be summoned by just typing "gemyni" after go installing it as a package (it was actually just building go file and adding to env variables, gotta check if installing it via go install works the same way tho)
 
 TODO: branch to a crypto option so don't have api key exposed in .env (even though is local)
 TODO: default to flash 2.0 if none model is specified (flag for model selection, maybe use cobra)
-TODO: add release so can be summoned by just typing "gemyni" after go installing it as a package
 ? Potentially integrating image generation with flash 2.0
 ? Add tests
 ? Add more LLMs options for api calls (maybe would break the api response and error so integrate with standarized format)
@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,21 +32,33 @@ func main() {
 	// ANSI sequence to hide the cursor while rendering spinner (added \n for padding)
 	fmt.Print("\033[?25l\n")
 	s := spinner.New(
-		spinnerSet, 
+		spinnerSet,
 		200*time.Millisecond,
 	)
 	// Some padding to the left
 	s.Prefix = "  "
 	s.Start()
 
-	// Get the query
-	query := os.Args[1]
-	err := godotenv.Load(".env")
+	exePath, err := os.Executable()
+	if err != nil {
+		fmt.Println("Error detecting executable path:", err)
+		return
+	}
+
+	exeDir := filepath.Dir(exePath)
+	envPath := filepath.Join(exeDir, ".env")
+
+	err = godotenv.Load(envPath)
 	if err != nil {
 		s.Stop()
 		fmt.Println("Failed loading .env file")
+		fmt.Println(err)
+		return
 	}
-	
+
+	// Get the query
+	query := os.Args[1]
+
 	ctx := context.Background()
 	client, _ := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  os.Getenv("LLM_KEY"),
@@ -57,10 +70,10 @@ func main() {
 		genai.Text(query),
 		nil,
 	)
-	
+
 	strB := &strings.Builder{}
 	// Arbitrary amount of characters
-	strB.Grow(500) 
+	strB.Grow(500)
 
 	r, _ := glam.NewTermRenderer(
 		glam.WithAutoStyle(),
@@ -69,7 +82,7 @@ func main() {
 	)
 
 	for chunk := range stream {
-		// Sometimes chunk is blank so this throw a nil pointer derefence 
+		// Sometimes chunk is blank so this throw a nil pointer derefence
 		if chunk != nil {
 			part := chunk.Candidates[0].Content.Parts[0]
 			strB.WriteString(part.Text)
