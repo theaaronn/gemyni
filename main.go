@@ -39,26 +39,27 @@ func main() {
 	s.Prefix = "  "
 	s.Start()
 
+	// We need the path of the directory to fetch the .env file
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Println("Error detecting executable path:", err)
+		fmt.Printf("Error detecting executable path, %v", err)
 		return
 	}
-
 	exeDir := filepath.Dir(exePath)
 	envPath := filepath.Join(exeDir, ".env")
 
 	err = godotenv.Load(envPath)
 	if err != nil {
 		s.Stop()
-		fmt.Println("Failed loading .env file")
-		fmt.Println(err)
+		fmt.Printf("Failed loading .env file, %v", err)
 		return
 	}
 
 	// Get the query
 	query := os.Args[1]
-
+	if len(query) == 0 {
+		fmt.Printf("You gotta ask for something")
+	}
 	ctx := context.Background()
 	client, _ := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  os.Getenv("LLM_KEY"),
@@ -70,12 +71,15 @@ func main() {
 		genai.Text(query),
 		nil,
 	)
-
+	if stream == nil {
+		fmt.Println("You don't have wifi")
+		return
+	}
 	strB := &strings.Builder{}
 	// Arbitrary amount of characters
 	strB.Grow(500)
 
-	r, _ := glam.NewTermRenderer(
+	renderer, _ := glam.NewTermRenderer(
 		glam.WithAutoStyle(),
 		glam.WithTableWrap(false),
 		glam.WithWordWrap(150),
@@ -89,9 +93,9 @@ func main() {
 		}
 	}
 
-	out, err := r.Render(strB.String())
+	out, err := renderer.Render(strB.String())
 	if err != nil {
-		fmt.Println("Failed rendering glamour:", err.Error())
+		fmt.Printf("Failed rendering glamour, %v", err)
 	} else {
 		s.Stop()
 		fmt.Print(out)
